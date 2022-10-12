@@ -1,52 +1,52 @@
-import PropTypes from 'prop-types'
-import React, { RefObject } from 'react'
+import * as utils from './utils'
+
+import {
+  ActionSheetOptions,
+  ActionSheetProvider,
+} from '@expo/react-native-action-sheet'
 import {
   Animated,
-  Platform,
-  StyleSheet,
-  View,
-  StyleProp,
-  ViewStyle,
-  SafeAreaView,
   FlatList,
-  TextStyle,
   KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleProp,
+  StyleSheet,
+  TextStyle,
+  View,
+  ViewStyle,
 } from 'react-native'
 import {
-  ActionSheetProvider,
-  ActionSheetOptions,
-} from '@expo/react-native-action-sheet'
-import uuid from 'uuid'
-import { getBottomSpace } from 'react-native-iphone-x-helper'
-import dayjs from 'dayjs'
-import localizedFormat from 'dayjs/plugin/localizedFormat'
+  DATE_FORMAT,
+  DEFAULT_PLACEHOLDER,
+  MAX_COMPOSER_HEIGHT,
+  MIN_COMPOSER_HEIGHT,
+  TIME_FORMAT,
+} from './Constant'
+import { IMessage, LeftRightStyle, Reply, User } from './Models'
+import React, { MutableRefObject } from 'react'
 
-import * as utils from './utils'
 import Actions from './Actions'
 import Avatar from './Avatar'
 import Bubble from './Bubble'
-import SystemMessage from './SystemMessage'
-import MessageImage from './MessageImage'
-import MessageText from './MessageText'
 import Composer from './Composer'
 import Day from './Day'
+import GiftedAvatar from './GiftedAvatar'
 import InputToolbar from './InputToolbar'
 import LoadEarlier from './LoadEarlier'
 import Message from './Message'
 import MessageContainer from './MessageContainer'
-import Send from './Send'
-import Time from './Time'
-import GiftedAvatar from './GiftedAvatar'
-
-import {
-  MIN_COMPOSER_HEIGHT,
-  MAX_COMPOSER_HEIGHT,
-  DEFAULT_PLACEHOLDER,
-  TIME_FORMAT,
-  DATE_FORMAT,
-} from './Constant'
-import { IMessage, User, Reply, LeftRightStyle } from './Models'
+import MessageImage from './MessageImage'
+import MessageText from './MessageText'
+import PropTypes from 'prop-types'
 import QuickReplies from './QuickReplies'
+import Send from './Send'
+import SystemMessage from './SystemMessage'
+import Time from './Time'
+import dayjs from 'dayjs'
+import { getBottomSpace } from 'react-native-iphone-x-helper'
+import localizedFormat from 'dayjs/plugin/localizedFormat'
+import uuid from 'uuid'
 
 dayjs.extend(localizedFormat)
 
@@ -204,6 +204,10 @@ export interface GiftedChatProps<TMessage extends IMessage = IMessage> {
     props: Message<TMessage>['props'],
     nextProps: Message<TMessage>['props'],
   ): boolean
+  /* Ref to inner FlatList */
+  listRef?:
+    | ((flatList: FlatList<TMessage> | null) => void)
+    | MutableRefObject<FlatList<TMessage> | null | undefined>
 }
 
 export interface GiftedChatState<TMessage extends IMessage = IMessage> {
@@ -215,10 +219,9 @@ export interface GiftedChatState<TMessage extends IMessage = IMessage> {
   messages?: TMessage[]
 }
 
-class GiftedChat<TMessage extends IMessage = IMessage> extends React.Component<
-  GiftedChatProps<TMessage>,
-  GiftedChatState
-> {
+class GiftedChat<
+  TMessage extends IMessage = IMessage
+> extends React.PureComponent<GiftedChatProps<TMessage>, GiftedChatState> {
   static childContextTypes = {
     actionSheet: PropTypes.func,
     getLocale: PropTypes.func,
@@ -390,7 +393,7 @@ class GiftedChat<TMessage extends IMessage = IMessage> extends React.Component<
   _locale: string = 'en'
   invertibleScrollViewProps: any = undefined
   _actionSheetRef: any = undefined
-  _messageContainerRef?: RefObject<FlatList<IMessage>> = React.createRef()
+  _messageContainerRef?: FlatList<TMessage> | null | undefined = undefined
   textInput?: any
 
   state = {
@@ -413,6 +416,8 @@ class GiftedChat<TMessage extends IMessage = IMessage> extends React.Component<
       onKeyboardDidShow: this.onKeyboardDidShow,
       onKeyboardDidHide: this.onKeyboardDidHide,
     }
+
+    this.getListRef = this.getListRef.bind(this)
   }
 
   getChildContext() {
@@ -436,23 +441,39 @@ class GiftedChat<TMessage extends IMessage = IMessage> extends React.Component<
   }
 
   componentDidUpdate(prevProps: GiftedChatProps<TMessage> = {}) {
-    const { messages, text, inverted } = this.props
+    const {
+      messages,
+      text,
+      inverted,
+      renderMessage,
+      renderMessageText,
+      renderMessageImage,
+    } = this.props
 
-    if (this.props !== prevProps) {
-      this.setMessages(messages || [])
+    const messagesNeedUpdate =
+      messages !== prevProps.messages ||
+      (messages &&
+        prevProps.messages &&
+        messages.length !== prevProps.messages.length) ||
+      renderMessage !== prevProps.renderMessage ||
+      renderMessageText !== prevProps.renderMessageText ||
+      renderMessageImage !== prevProps.renderMessageImage
+    const textNeedsUpdate =
+      text !== undefined && text !== prevProps.text ? text : this.state.text
+    if (messagesNeedUpdate || textNeedsUpdate) {
+      this.setState({
+        messages: messagesNeedUpdate ? messages || [] : this.state.messages,
+        text: textNeedsUpdate ? text : this.state.text,
+      })
     }
 
     if (
       inverted === false &&
       messages &&
-      prevProps.messages &&
-      messages.length !== prevProps.messages.length
+      (messages !== prevProps.messages ||
+        (prevProps.messages && messages.length !== prevProps.messages.length))
     ) {
       setTimeout(() => this.scrollToBottom(false), 200)
-    }
-
-    if (text !== prevProps.text) {
-      this.setTextFromProp(text)
     }
   }
 
@@ -632,16 +653,25 @@ class GiftedChat<TMessage extends IMessage = IMessage> extends React.Component<
   }
 
   scrollToBottom(animated = true) {
-    if (this._messageContainerRef && this._messageContainerRef.current) {
+    if (this._messageContainerRef) {
       const { inverted } = this.props
       if (!inverted) {
-        this._messageContainerRef.current.scrollToEnd({ animated })
+        this._messageContainerRef.scrollToEnd({ animated })
       } else {
-        this._messageContainerRef.current.scrollToOffset({
+        this._messageContainerRef.scrollToOffset({
           offset: 0,
           animated,
         })
       }
+    }
+  }
+
+  getListRef(flatList: FlatList<TMessage> | null) {
+    this._messageContainerRef = flatList
+    if (typeof this.props.listRef === 'function') {
+      this.props.listRef(flatList)
+    } else if (this.props.listRef) {
+      this.props.listRef.current = flatList
     }
   }
 
@@ -660,7 +690,7 @@ class GiftedChat<TMessage extends IMessage = IMessage> extends React.Component<
           {...messagesContainerProps}
           invertibleScrollViewProps={this.invertibleScrollViewProps}
           messages={this.getMessages()}
-          forwardRef={this._messageContainerRef}
+          forwardRef={this.getListRef}
           isTyping={this.props.isTyping}
         />
         {this.renderChatFooter()}

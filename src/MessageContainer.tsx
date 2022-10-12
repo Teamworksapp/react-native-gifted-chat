@@ -1,28 +1,27 @@
-import PropTypes from 'prop-types'
-import React, { RefObject } from 'react'
-
 import {
-  FlatList,
-  View,
-  StyleSheet,
-  Keyboard,
-  TouchableOpacity,
-  Text,
-  ListViewProps,
-  ListRenderItemInfo,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-  StyleProp,
-  ViewStyle,
-  Platform,
   EmitterSubscription,
+  FlatList,
+  Keyboard,
+  ListRenderItemInfo,
+  ListViewProps,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle,
 } from 'react-native'
+import { IMessage, Reply, User } from './Models'
+import React, { MutableRefObject } from 'react'
+import { StylePropType, warning } from './utils'
 
+import Color from './Color'
 import LoadEarlier from './LoadEarlier'
 import Message from './Message'
-import Color from './Color'
-import { User, IMessage, Reply } from './Models'
-import { warning, StylePropType } from './utils'
+import PropTypes from 'prop-types'
 import TypingIndicator from './TypingIndicator'
 
 const styles = StyleSheet.create({
@@ -79,7 +78,9 @@ export interface MessageContainerProps<TMessage extends IMessage> {
   invertibleScrollViewProps?: any
   extraData?: any
   scrollToBottomOffset?: number
-  forwardRef?: RefObject<FlatList<IMessage>>
+  forwardRef?:
+    | ((flatList: FlatList<TMessage> | null) => void)
+    | MutableRefObject<FlatList<TMessage> | null | undefined>
   renderChatEmpty?(): React.ReactNode
   renderFooter?(props: MessageContainerProps<TMessage>): React.ReactNode
   renderMessage?(props: Message['props']): React.ReactNode
@@ -93,6 +94,7 @@ export interface MessageContainerProps<TMessage extends IMessage> {
 
 interface State {
   showScrollBottom: boolean
+  extraData?: any
 }
 
 export default class MessageContainer<
@@ -118,7 +120,6 @@ export default class MessageContainer<
     scrollToBottomStyle: {},
     infiniteScroll: false,
     isLoadingEarlier: false,
-
   }
 
   static propTypes = {
@@ -143,13 +144,22 @@ export default class MessageContainer<
     infiniteScroll: PropTypes.bool,
   }
 
+  _listRef: FlatList<TMessage> | null | undefined = undefined
+  _listRecorded: boolean = false
+
   state = {
     showScrollBottom: false,
+    extraData: [this.props.extraData, this.props.isTyping],
   }
-  willShowSub: EmitterSubscription;
-  didShowSub: EmitterSubscription;
-  willHideSub: EmitterSubscription;
-  didHideSub: EmitterSubscription;
+  willShowSub: EmitterSubscription | undefined
+  didShowSub: EmitterSubscription | undefined
+  willHideSub: EmitterSubscription | undefined
+  didHideSub: EmitterSubscription | undefined
+
+  constructor(props: MessageContainerProps<TMessage>) {
+    super(props)
+    this.getListRef = this.getListRef.bind(this)
+  }
 
   componentDidMount() {
     if (this.props.messages && this.props.messages.length === 0) {
@@ -177,12 +187,19 @@ export default class MessageContainer<
     ) {
       this.attachKeyboardListeners()
     }
+    if (
+      this.props.extraData !== prevProps.extraData ||
+      this.props.isTyping !== prevProps.isTyping
+    ) {
+      this.setState({ extraData: [this.props.extraData, this.props.isTyping] })
+    }
   }
 
   // 0.16.3-patch: https://github.com/FaridSafi/react-native-gifted-chat/issues/2112#issue-1000416894
   attachKeyboardListeners = () => {
     const { invertibleScrollViewProps: invertibleProps } = this.props
     if (invertibleProps) {
+      this.detachKeyboardListeners()
       // Keyboard.addListener(
       //   'keyboardWillShow',
       //   invertibleProps.onKeyboardWillShow,
@@ -197,12 +214,18 @@ export default class MessageContainer<
         'keyboardWillShow',
         invertibleProps.onKeyboardWillShow,
       )
-      this.didShowSub = Keyboard.addListener('keyboardDidShow', invertibleProps.onKeyboardDidShow)
+      this.didShowSub = Keyboard.addListener(
+        'keyboardDidShow',
+        invertibleProps.onKeyboardDidShow,
+      )
       this.willHideSub = Keyboard.addListener(
         'keyboardWillHide',
         invertibleProps.onKeyboardWillHide,
       )
-      this.didHideSub = Keyboard.addListener('keyboardDidHide', invertibleProps.onKeyboardDidHide)
+      this.didHideSub = Keyboard.addListener(
+        'keyboardDidHide',
+        invertibleProps.onKeyboardDidHide,
+      )
     }
   }
 
@@ -224,10 +247,10 @@ export default class MessageContainer<
     //   'keyboardDidHide',
     //   invertibleProps.onKeyboardDidHide,
     // )
-    this.willShowSub.remove();
-    this.didShowSub.remove();
-    this.willHideSub.remove();
-    this.didHideSub.remove();
+    this.willShowSub?.remove()
+    this.didShowSub?.remove()
+    this.willHideSub?.remove()
+    this.didHideSub?.remove()
   }
 
   renderTypingIndicator = () => {
@@ -259,8 +282,8 @@ export default class MessageContainer<
   }
 
   scrollTo(options: { animated?: boolean; offset: number }) {
-    if (this.props.forwardRef && this.props.forwardRef.current && options) {
-      this.props.forwardRef.current.scrollToOffset(options)
+    if (this._listRef && options) {
+      this._listRef.scrollToOffset(options)
     }
   }
 
@@ -268,8 +291,8 @@ export default class MessageContainer<
     const { inverted } = this.props
     if (inverted) {
       this.scrollTo({ offset: 0, animated })
-    } else if (this.props.forwardRef && this.props.forwardRef.current) {
-      this.props.forwardRef!.current!.scrollToEnd({ animated })
+    } else if (this._listRef) {
+      this._listRef!.scrollToEnd({ animated })
     }
   }
 
@@ -391,6 +414,12 @@ export default class MessageContainer<
         15 * this.props.messages!.length,
       )
     }
+
+    // enables onViewableItemsChanged to get called on first render
+    if (this._listRef && !this._listRecorded) {
+      this._listRecorded = true
+      this._listRef.recordInteraction()
+    }
   }
 
   onEndReached = ({ distanceFromEnd }: { distanceFromEnd: number }) => {
@@ -413,6 +442,15 @@ export default class MessageContainer<
     }
   }
 
+  getListRef(flatList: FlatList<TMessage> | null) {
+    this._listRef = flatList
+    if (typeof this.props.forwardRef === 'function') {
+      this.props.forwardRef(flatList)
+    } else if (this.props.forwardRef) {
+      this.props.forwardRef.current = flatList
+    }
+  }
+
   keyExtractor = (item: TMessage) => `${item._id}`
 
   render() {
@@ -427,8 +465,8 @@ export default class MessageContainer<
           ? this.renderScrollToBottomWrapper()
           : null}
         <FlatList
-          ref={this.props.forwardRef}
-          extraData={[this.props.extraData, this.props.isTyping]}
+          ref={this.getListRef}
+          extraData={this.state.extraData}
           keyExtractor={this.keyExtractor}
           enableEmptySections
           automaticallyAdjustContentInsets={false}
