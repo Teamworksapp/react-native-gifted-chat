@@ -455,6 +455,7 @@ export default class MessageContainer<
 
   render() {
     const { inverted } = this.props
+    const { style, ...listViewProps } = this.props.listViewProps
     return (
       <View
         style={
@@ -472,7 +473,7 @@ export default class MessageContainer<
           automaticallyAdjustContentInsets={false}
           inverted={inverted}
           data={this.props.messages}
-          style={styles.listStyle}
+          style={[styles.listStyle, style]}
           contentContainerStyle={styles.contentContainerStyle}
           renderItem={this.renderRow}
           {...this.props.invertibleScrollViewProps}
@@ -488,7 +489,7 @@ export default class MessageContainer<
           onLayout={this.onLayoutList}
           onEndReached={this.onEndReached}
           onEndReachedThreshold={0.1}
-          {...this.props.listViewProps}
+          {...listViewProps}
         />
       </View>
     )
