@@ -1,9 +1,9 @@
-import PropTypes from 'prop-types';
-import React, { RefObject } from 'react';
-import { FlatList, ListViewProps, ListRenderItemInfo, NativeSyntheticEvent, NativeScrollEvent, StyleProp, ViewStyle, EmitterSubscription } from 'react-native';
+import { EmitterSubscription, FlatList, ListRenderItemInfo, ListViewProps, NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
+import { IMessage, Reply, User } from './Models';
+import React, { MutableRefObject } from 'react';
 import LoadEarlier from './LoadEarlier';
 import Message from './Message';
-import { User, IMessage, Reply } from './Models';
+import PropTypes from 'prop-types';
 export interface MessageContainerProps<TMessage extends IMessage> {
     messages?: TMessage[];
     isTyping?: boolean;
@@ -17,7 +17,7 @@ export interface MessageContainerProps<TMessage extends IMessage> {
     invertibleScrollViewProps?: any;
     extraData?: any;
     scrollToBottomOffset?: number;
-    forwardRef?: RefObject<FlatList<IMessage>>;
+    forwardRef?: ((flatList: FlatList<TMessage> | null) => void) | MutableRefObject<FlatList<TMessage> | null | undefined>;
     renderChatEmpty?(): React.ReactNode;
     renderFooter?(props: MessageContainerProps<TMessage>): React.ReactNode;
     renderMessage?(props: Message['props']): React.ReactNode;
@@ -30,6 +30,7 @@ export interface MessageContainerProps<TMessage extends IMessage> {
 }
 interface State {
     showScrollBottom: boolean;
+    extraData?: any;
 }
 export default class MessageContainer<TMessage extends IMessage = IMessage> extends React.PureComponent<MessageContainerProps<TMessage>, State> {
     static defaultProps: {
@@ -74,13 +75,17 @@ export default class MessageContainer<TMessage extends IMessage = IMessage> exte
         scrollToBottomStyle: PropTypes.Requireable<number | boolean | object>;
         infiniteScroll: PropTypes.Requireable<boolean>;
     };
+    _listRef: FlatList<TMessage> | null | undefined;
+    _listRecorded: boolean;
     state: {
         showScrollBottom: boolean;
+        extraData: any[];
     };
-    willShowSub: EmitterSubscription;
-    didShowSub: EmitterSubscription;
-    willHideSub: EmitterSubscription;
-    didHideSub: EmitterSubscription;
+    willShowSub: EmitterSubscription | undefined;
+    didShowSub: EmitterSubscription | undefined;
+    willHideSub: EmitterSubscription | undefined;
+    didHideSub: EmitterSubscription | undefined;
+    constructor(props: MessageContainerProps<TMessage>);
     componentDidMount(): void;
     componentWillUnmount(): void;
     componentDidUpdate(prevProps: MessageContainerProps<TMessage>): void;
@@ -104,6 +109,7 @@ export default class MessageContainer<TMessage extends IMessage = IMessage> exte
     onEndReached: ({ distanceFromEnd }: {
         distanceFromEnd: number;
     }) => void;
+    getListRef(flatList: FlatList<TMessage> | null): void;
     keyExtractor: (item: TMessage) => string;
     render(): JSX.Element;
 }

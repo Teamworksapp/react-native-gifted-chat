@@ -1,25 +1,25 @@
-import PropTypes from 'prop-types';
-import React, { RefObject } from 'react';
-import { Animated, StyleProp, ViewStyle, FlatList, TextStyle } from 'react-native';
-import { ActionSheetOptions } from '@expo/react-native-action-sheet';
 import * as utils from './utils';
+import { ActionSheetOptions } from '@expo/react-native-action-sheet';
+import { Animated, FlatList, StyleProp, TextStyle, ViewStyle } from 'react-native';
+import { IMessage, LeftRightStyle, Reply, User } from './Models';
+import React, { MutableRefObject } from 'react';
 import Actions from './Actions';
 import Avatar from './Avatar';
 import Bubble from './Bubble';
-import SystemMessage from './SystemMessage';
-import MessageImage from './MessageImage';
-import MessageText from './MessageText';
 import Composer from './Composer';
 import Day from './Day';
+import GiftedAvatar from './GiftedAvatar';
 import InputToolbar from './InputToolbar';
 import LoadEarlier from './LoadEarlier';
 import Message from './Message';
 import MessageContainer from './MessageContainer';
-import Send from './Send';
-import Time from './Time';
-import GiftedAvatar from './GiftedAvatar';
-import { IMessage, User, Reply, LeftRightStyle } from './Models';
+import MessageImage from './MessageImage';
+import MessageText from './MessageText';
+import PropTypes from 'prop-types';
 import QuickReplies from './QuickReplies';
+import Send from './Send';
+import SystemMessage from './SystemMessage';
+import Time from './Time';
 export interface GiftedChatProps<TMessage extends IMessage = IMessage> {
     messages?: TMessage[];
     isTyping?: boolean;
@@ -101,6 +101,7 @@ export interface GiftedChatProps<TMessage extends IMessage = IMessage> {
     renderQuickReplySend?(): React.ReactNode;
     scrollToBottomComponent?(): React.ReactNode;
     shouldUpdateMessage?(props: Message<TMessage>['props'], nextProps: Message<TMessage>['props']): boolean;
+    listRef?: ((flatList: FlatList<TMessage> | null) => void) | MutableRefObject<FlatList<TMessage> | null | undefined>;
 }
 export interface GiftedChatState<TMessage extends IMessage = IMessage> {
     isInitialized: boolean;
@@ -110,7 +111,7 @@ export interface GiftedChatState<TMessage extends IMessage = IMessage> {
     text?: string;
     messages?: TMessage[];
 }
-declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.Component<GiftedChatProps<TMessage>, GiftedChatState> {
+declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.PureComponent<GiftedChatProps<TMessage>, GiftedChatState> {
     static childContextTypes: {
         actionSheet: PropTypes.Requireable<(...args: any[]) => any>;
         getLocale: PropTypes.Requireable<(...args: any[]) => any>;
@@ -251,7 +252,7 @@ declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.Com
     _locale: string;
     invertibleScrollViewProps: any;
     _actionSheetRef: any;
-    _messageContainerRef?: RefObject<FlatList<IMessage>>;
+    _messageContainerRef?: FlatList<TMessage> | null | undefined;
     textInput?: any;
     state: {
         isInitialized: boolean;
@@ -304,6 +305,7 @@ declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.Com
     onKeyboardDidShow: (e: any) => void;
     onKeyboardDidHide: (e: any) => void;
     scrollToBottom(animated?: boolean): void;
+    getListRef(flatList: FlatList<TMessage> | null): void;
     renderMessages(): JSX.Element;
     onSend: (messages?: TMessage[], shouldResetInputToolbar?: boolean) => void;
     resetInputToolbar(): void;
