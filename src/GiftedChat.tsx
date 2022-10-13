@@ -93,6 +93,11 @@ export interface GiftedChatProps<TMessage extends IMessage = IMessage> {
   /* Determine whether to handle keyboard awareness inside the plugin. If you have your own keyboard handling outside the plugin set this to false; default is true */
   renderAvatarOnTop?: boolean
   inverted?: boolean
+  /* 
+    Because of crashing on Android by inverted FlatLists, we have to use styling to mimic the inverted behavior 
+    https://github.com/facebook/react-native/issues/30034
+  */
+  fakeInverted?: boolean
   /* Extra props to be passed to the <Image> component created by the default renderMessageImage */
   imageProps?: Message<TMessage>['props']
   /*Extra props to be passed to the MessageImage's Lightbox */
@@ -210,7 +215,7 @@ export interface GiftedChatProps<TMessage extends IMessage = IMessage> {
     | MutableRefObject<FlatList<TMessage> | null | undefined>
 }
 
-export interface GiftedChatState<TMessage extends IMessage = IMessage> {
+export interface GiftedChatState<TMessage extends IMessage> {
   isInitialized: boolean
   composerHeight?: number
   messagesContainerHeight?: number | Animated.Value
@@ -221,7 +226,10 @@ export interface GiftedChatState<TMessage extends IMessage = IMessage> {
 
 class GiftedChat<
   TMessage extends IMessage = IMessage
-> extends React.PureComponent<GiftedChatProps<TMessage>, GiftedChatState> {
+> extends React.PureComponent<
+  GiftedChatProps<TMessage>,
+  GiftedChatState<TMessage>
+> {
   static childContextTypes = {
     actionSheet: PropTypes.func,
     getLocale: PropTypes.func,
@@ -351,6 +359,7 @@ class GiftedChat<
     maxInputLength: PropTypes.number,
     forceGetKeyboardHeight: PropTypes.bool,
     inverted: PropTypes.bool,
+    fakeInverted: PropTypes.bool,
     textInputProps: PropTypes.object,
     extraData: PropTypes.object,
     minComposerHeight: PropTypes.number,
@@ -402,14 +411,14 @@ class GiftedChat<
     messagesContainerHeight: undefined,
     typingDisabled: false,
     text: undefined,
-    messages: undefined,
+    messages: this.props.messages,
   }
 
   constructor(props: GiftedChatProps<TMessage>) {
     super(props)
 
     this.invertibleScrollViewProps = {
-      inverted: this.props.inverted,
+      inverted: this.props.inverted || this.props.fakeInverted,
       keyboardShouldPersistTaps: this.props.keyboardShouldPersistTaps,
       onKeyboardWillShow: this.onKeyboardWillShow,
       onKeyboardWillHide: this.onKeyboardWillHide,
@@ -448,6 +457,7 @@ class GiftedChat<
       renderMessage,
       renderMessageText,
       renderMessageImage,
+      fakeInverted,
     } = this.props
 
     const messagesNeedUpdate =
@@ -461,14 +471,15 @@ class GiftedChat<
     const textNeedsUpdate =
       text !== undefined && text !== prevProps.text ? text : this.state.text
     if (messagesNeedUpdate || textNeedsUpdate) {
-      this.setState({
-        messages: messagesNeedUpdate ? messages || [] : this.state.messages,
-        text: textNeedsUpdate ? text : this.state.text,
-      })
+      this.setState(({ messages: prevMessages, text: prevText }) => ({
+        messages: messagesNeedUpdate ? messages || [] : prevMessages,
+        text: textNeedsUpdate ? text : prevText,
+      }))
     }
 
     if (
       inverted === false &&
+      !fakeInverted &&
       messages &&
       (messages !== prevProps.messages ||
         (prevProps.messages && messages.length !== prevProps.messages.length))
@@ -654,8 +665,8 @@ class GiftedChat<
 
   scrollToBottom(animated = true) {
     if (this._messageContainerRef) {
-      const { inverted } = this.props
-      if (!inverted) {
+      const { inverted, fakeInverted } = this.props
+      if (!inverted && !fakeInverted) {
         this._messageContainerRef.scrollToEnd({ animated })
       } else {
         this._messageContainerRef.scrollToOffset({
@@ -678,7 +689,7 @@ class GiftedChat<
   renderMessages() {
     const { messagesContainerStyle, ...messagesContainerProps } = this.props
     const fragment = (
-      <View
+      <Animated.View
         style={[
           {
             height: this.state.messagesContainerHeight,
@@ -686,15 +697,22 @@ class GiftedChat<
           messagesContainerStyle,
         ]}
       >
-        <MessageContainer<TMessage>
-          {...messagesContainerProps}
-          invertibleScrollViewProps={this.invertibleScrollViewProps}
-          messages={this.getMessages()}
-          forwardRef={this.getListRef}
-          isTyping={this.props.isTyping}
-        />
+        <View
+          style={[
+            styles.container,
+            messagesContainerProps.fakeInverted && styles.fakeInvert,
+          ]}
+        >
+          <MessageContainer<TMessage>
+            {...messagesContainerProps}
+            invertibleScrollViewProps={this.invertibleScrollViewProps}
+            messages={this.getMessages()}
+            forwardRef={this.getListRef}
+            isTyping={this.props.isTyping}
+          />
+        </View>
         {this.renderChatFooter()}
-      </View>
+      </Animated.View>
     )
 
     return this.props.isKeyboardInternallyHandled ? (
@@ -898,6 +916,9 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  fakeInvert: {
+    transform: [{ rotate: '180deg' }],
   },
 })
 

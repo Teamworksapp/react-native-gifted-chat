@@ -38,13 +38,23 @@ const styles = StyleSheet.create({
   },
   emptyChatContainer: {
     flex: 1,
-    transform: [{ scaleY: -1 }],
   },
   headerWrapper: {
     flex: 1,
   },
+  fakeInvertContainer: {
+    flexGrow: 1,
+    flexShrink: 0,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
   listStyle: {
     flex: 1,
+  },
+  fakeInvertListStyle: {
+    flex: 1,
+    width: '100%',
   },
   scrollToBottomStyle: {
     opacity: 0.8,
@@ -63,6 +73,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 1,
   },
+  scrollToBottomFakeInvertStyle: {
+    left: 10,
+    right: undefined,
+    top: 30,
+    bottom: undefined,
+  },
+  fakeInvert: {
+    transform: [{ rotate: '180deg' }],
+  },
 })
 
 export interface MessageContainerProps<TMessage extends IMessage> {
@@ -71,6 +90,7 @@ export interface MessageContainerProps<TMessage extends IMessage> {
   user?: User
   listViewProps: Partial<ListViewProps>
   inverted?: boolean
+  fakeInverted?: boolean
   loadEarlier?: boolean
   alignTop?: boolean
   scrollToBottom?: boolean
@@ -187,11 +207,15 @@ export default class MessageContainer<
     ) {
       this.attachKeyboardListeners()
     }
-    if (
+    const extraDataChange =
       this.props.extraData !== prevProps.extraData ||
       this.props.isTyping !== prevProps.isTyping
-    ) {
-      this.setState({ extraData: [this.props.extraData, this.props.isTyping] })
+    if (extraDataChange) {
+      this.setState(({ extraData }) => ({
+        extraData: extraDataChange
+          ? [this.props.extraData, this.props.isTyping]
+          : extraData,
+      }))
     }
   }
 
@@ -288,8 +312,8 @@ export default class MessageContainer<
   }
 
   scrollToBottom = (animated: boolean = true) => {
-    const { inverted } = this.props
-    if (inverted) {
+    const { inverted, fakeInverted } = this.props
+    if (inverted || fakeInverted) {
       this.scrollTo({ offset: 0, animated })
     } else if (this._listRef) {
       this._listRef!.scrollToEnd({ animated })
@@ -304,8 +328,8 @@ export default class MessageContainer<
         layoutMeasurement: { height: layoutMeasurementHeight },
       },
     } = event
-    const { scrollToBottomOffset } = this.props
-    if (this.props.inverted) {
+    const { scrollToBottomOffset, inverted, fakeInverted } = this.props
+    if (inverted || fakeInverted) {
       if (contentOffsetY > scrollToBottomOffset!) {
         this.setState({ showScrollBottom: true })
       } else {
@@ -336,12 +360,16 @@ export default class MessageContainer<
       }
       item.user = { _id: 0 }
     }
-    const { messages, user, inverted, ...restProps } = this.props
+    const { messages, user, inverted, fakeInverted, ...restProps } = this.props
     if (messages && user) {
       const previousMessage =
-        (inverted ? messages[index + 1] : messages[index - 1]) || {}
+        (inverted || fakeInverted
+          ? messages[index + 1]
+          : messages[index - 1]) || {}
       const nextMessage =
-        (inverted ? messages[index - 1] : messages[index + 1]) || {}
+        (inverted || fakeInverted
+          ? messages[index - 1]
+          : messages[index + 1]) || {}
 
       const messageProps: Message['props'] = {
         ...restProps,
@@ -355,20 +383,34 @@ export default class MessageContainer<
       }
 
       if (this.props.renderMessage) {
-        return this.props.renderMessage(messageProps)
+        return (
+          <View style={this.props.fakeInverted && styles.fakeInvert}>
+            {this.props.renderMessage(messageProps)}
+          </View>
+        )
       }
-      return <Message {...messageProps} />
+      return (
+        <View style={this.props.fakeInverted && styles.fakeInvert}>
+          <Message {...messageProps} />
+        </View>
+      )
     }
     return null
   }
 
   renderChatEmpty = () => {
     if (this.props.renderChatEmpty) {
+      const empty = this.props.renderChatEmpty()
       return this.props.inverted ? (
-        this.props.renderChatEmpty()
+        empty
       ) : (
-        <View style={styles.emptyChatContainer}>
-          {this.props.renderChatEmpty()}
+        <View
+          style={[
+            styles.emptyChatContainer,
+            this.props.fakeInverted && styles.fakeInvert,
+          ]}
+        >
+          {empty}
         </View>
       )
     }
@@ -376,7 +418,14 @@ export default class MessageContainer<
   }
 
   renderHeaderWrapper = () => (
-    <View style={styles.headerWrapper}>{this.renderLoadEarlier()}</View>
+    <View
+      style={[
+        styles.headerWrapper,
+        this.props.fakeInverted && styles.fakeInvert,
+      ]}
+    >
+      {this.renderLoadEarlier()}
+    </View>
   )
 
   renderScrollBottomComponent() {
@@ -392,7 +441,14 @@ export default class MessageContainer<
   renderScrollToBottomWrapper() {
     const propsStyle = this.props.scrollToBottomStyle || {}
     return (
-      <View style={[styles.scrollToBottomStyle, propsStyle]}>
+      <View
+        style={[
+          styles.scrollToBottomStyle,
+          this.props.fakeInverted && styles.fakeInvert,
+          this.props.fakeInverted && styles.scrollToBottomFakeInvertStyle,
+          propsStyle,
+        ]}
+      >
         <TouchableOpacity
           onPress={() => this.scrollToBottom()}
           hitSlop={{ top: 5, left: 5, right: 5, bottom: 5 }}
@@ -406,6 +462,7 @@ export default class MessageContainer<
   onLayoutList = () => {
     if (
       !this.props.inverted &&
+      !this.props.fakeInverted &&
       !!this.props.messages &&
       this.props.messages!.length
     ) {
@@ -454,12 +511,20 @@ export default class MessageContainer<
   keyExtractor = (item: TMessage) => `${item._id}`
 
   render() {
-    const { inverted } = this.props
+    const { messages, inverted, fakeInverted } = this.props
     const { style, ...listViewProps } = this.props.listViewProps
+    const {
+      inverted: removeInverted,
+      ...invertibleScrollViewProps
+    } = this.props.invertibleScrollViewProps
     return (
       <View
         style={
-          this.props.alignTop ? styles.containerAlignTop : styles.container
+          fakeInverted
+            ? styles.fakeInvertContainer
+            : this.props.alignTop
+            ? styles.containerAlignTop
+            : styles.container
         }
       >
         {this.state.showScrollBottom && this.props.scrollToBottom
@@ -472,17 +537,24 @@ export default class MessageContainer<
           enableEmptySections
           automaticallyAdjustContentInsets={false}
           inverted={inverted}
-          data={this.props.messages}
-          style={[styles.listStyle, style]}
+          data={messages}
+          style={[
+            fakeInverted ? styles.fakeInvertListStyle : styles.listStyle,
+            style,
+          ]}
           contentContainerStyle={styles.contentContainerStyle}
           renderItem={this.renderRow}
-          {...this.props.invertibleScrollViewProps}
+          {...invertibleScrollViewProps}
           ListEmptyComponent={this.renderChatEmpty}
           ListFooterComponent={
-            inverted ? this.renderHeaderWrapper : this.renderFooter
+            inverted || fakeInverted
+              ? this.renderHeaderWrapper
+              : this.renderFooter
           }
           ListHeaderComponent={
-            inverted ? this.renderFooter : this.renderHeaderWrapper
+            inverted || fakeInverted
+              ? this.renderFooter
+              : this.renderHeaderWrapper
           }
           onScroll={this.handleOnScroll}
           scrollEventThrottle={100}
