@@ -43,6 +43,7 @@ export interface GiftedChatProps<TMessage extends IMessage = IMessage> {
     isKeyboardInternallyHandled?: boolean;
     renderAvatarOnTop?: boolean;
     inverted?: boolean;
+    fakeInverted?: boolean;
     imageProps?: Message<TMessage>['props'];
     lightboxProps?: any;
     bottomOffset?: number;
@@ -103,7 +104,7 @@ export interface GiftedChatProps<TMessage extends IMessage = IMessage> {
     shouldUpdateMessage?(props: Message<TMessage>['props'], nextProps: Message<TMessage>['props']): boolean;
     listRef?: ((flatList: FlatList<TMessage> | null) => void) | MutableRefObject<FlatList<TMessage> | null | undefined>;
 }
-export interface GiftedChatState<TMessage extends IMessage = IMessage> {
+export interface GiftedChatState<TMessage extends IMessage> {
     isInitialized: boolean;
     composerHeight?: number;
     messagesContainerHeight?: number | Animated.Value;
@@ -111,7 +112,7 @@ export interface GiftedChatState<TMessage extends IMessage = IMessage> {
     text?: string;
     messages?: TMessage[];
 }
-declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.PureComponent<GiftedChatProps<TMessage>, GiftedChatState> {
+declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.PureComponent<GiftedChatProps<TMessage>, GiftedChatState<TMessage>> {
     static childContextTypes: {
         actionSheet: PropTypes.Requireable<(...args: any[]) => any>;
         getLocale: PropTypes.Requireable<(...args: any[]) => any>;
@@ -235,6 +236,7 @@ declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.Pur
         maxInputLength: PropTypes.Requireable<number>;
         forceGetKeyboardHeight: PropTypes.Requireable<boolean>;
         inverted: PropTypes.Requireable<boolean>;
+        fakeInverted: PropTypes.Requireable<boolean>;
         textInputProps: PropTypes.Requireable<object>;
         extraData: PropTypes.Requireable<object>;
         minComposerHeight: PropTypes.Requireable<number>;
@@ -260,7 +262,7 @@ declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.Pur
         messagesContainerHeight: undefined;
         typingDisabled: boolean;
         text: undefined;
-        messages: undefined;
+        messages: TMessage[] | undefined;
     };
     constructor(props: GiftedChatProps<TMessage>);
     getChildContext(): {
@@ -276,7 +278,7 @@ declare class GiftedChat<TMessage extends IMessage = IMessage> extends React.Pur
     setTextFromProp(textProp?: string): void;
     getTextFromProp(fallback: string): string;
     setMessages(messages: TMessage[]): void;
-    getMessages(): undefined;
+    getMessages(): TMessage[] | undefined;
     setMaxHeight(height: number): void;
     getMaxHeight(): number | undefined;
     setKeyboardHeight(height: number): void;

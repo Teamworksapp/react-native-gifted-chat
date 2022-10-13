@@ -10,6 +10,7 @@ export interface MessageContainerProps<TMessage extends IMessage> {
     user?: User;
     listViewProps: Partial<ListViewProps>;
     inverted?: boolean;
+    fakeInverted?: boolean;
     loadEarlier?: boolean;
     alignTop?: boolean;
     scrollToBottom?: boolean;
@@ -100,7 +101,7 @@ export default class MessageContainer<TMessage extends IMessage = IMessage> exte
     }): void;
     scrollToBottom: (animated?: boolean) => void;
     handleOnScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
-    renderRow: ({ item, index }: ListRenderItemInfo<TMessage>) => {} | null | undefined;
+    renderRow: ({ item, index }: ListRenderItemInfo<TMessage>) => JSX.Element | null;
     renderChatEmpty: () => {} | null | undefined;
     renderHeaderWrapper: () => JSX.Element;
     renderScrollBottomComponent(): {} | null | undefined;
